@@ -26,14 +26,70 @@ class Game:
 
     def betting_round(self, round_name):
         print(f"\n{round_name} Betting Round:")
+        active_players = [player for player in self.players if player.active and player.chips > 0]
+        current_bet = 0
+        last_bettor = None
+
+        while True:
+            actions_taken = False
+            for player in active_players:
+                if not player.active or player.chips == 0:
+                    continue
+                if all(p.current_bet == current_bet for p in active_players if p.active):
+                    if actions_taken:
+                        break  # Betting round ends when all bets are equal
+                print(f"\n{player.name}'s turn. Current bet: {current_bet}, Your bet: {player.current_bet}")
+                print(f"Chips: {player.chips}, Pot: {self.pot}")
+                action = self.get_player_action(player, current_bet)
+                if action == 'fold':
+                    player.fold()
+                    print(f"{player.name} folds.")
+                elif action == 'call':
+                    bet = current_bet - player.current_bet
+                    self.pot += player.bet(bet)
+                    print(f"{player.name} calls {bet} chips.")
+                elif action == 'raise':
+                    bet = current_bet - player.current_bet
+                    raise_amount = self.get_raise_amount(player, min_raise=10)
+                    total_bet = bet + raise_amount
+                    current_bet += raise_amount
+                    self.pot += player.bet(total_bet)
+                    last_bettor = player
+                    print(f"{player.name} raises by {raise_amount} chips. Total bet: {current_bet}")
+                elif action == 'check':
+                    print(f"{player.name} checks.")
+                actions_taken = True
+
+            active_players = [p for p in self.players if p.active and p.chips > 0]
+            if len(active_players) <= 1 or all(p.current_bet == current_bet for p in active_players):
+                break
+
         for player in self.players:
-            if player.active and player.chips > 0:
-                bet_amount = min(10, player.chips)
-                self.pot += player.bet(bet_amount)
-                print(f"{player.name} bets {bet_amount} chips.")
+            player.reset_bet()
+
+    def get_player_action(self, player, current_bet):
+        if player.current_bet < current_bet:
+            valid_actions = ['fold', 'call', 'raise']
+        else:
+            valid_actions = ['check', 'raise', 'fold']
+
+        while True:
+            action = input(f"{player.name}, choose an action ({'/'.join(valid_actions)}): ").lower()
+            if action in valid_actions:
+                return action
             else:
-                player.active = False
-                print(f"{player.name} folds.")
+                print("Invalid action. Please try again.")
+
+    def get_raise_amount(self, player, min_raise):
+        while True:
+            try:
+                amount = int(input(f"Enter raise amount (minimum {min_raise}): "))
+                if amount >= min_raise and amount <= player.chips:
+                    return amount
+                else:
+                    print(f"Invalid amount. Enter a value between {min_raise} and {player.chips}.")
+            except ValueError:
+                print("Please enter a numeric value.")
 
     def deal_flop(self):
         self.community_cards.extend(self.deck.deal(3))
@@ -81,14 +137,32 @@ class Game:
             for winner in winners:
                 winner.chips += split_pot
 
+    def check_for_winner(self):
+        active_players = [p for p in self.players if p.active]
+        if len(active_players) == 1:
+            winner = active_players[0]
+            print(f"\nAll other players folded. {winner.name} wins the pot of {self.pot} chips!")
+            winner.chips += self.pot
+            return True
+        return False
+
     def play(self):
         self.start_round()
         self.deal_hole_cards()
         self.betting_round("Pre-Flop")
+        if self.check_for_winner():
+            return
         self.deal_flop()
         self.betting_round("Flop")
+        if self.check_for_winner():
+            return
         self.deal_turn()
         self.betting_round("Turn")
+        if self.check_for_winner():
+            return
         self.deal_river()
         self.betting_round("River")
+        if self.check_for_winner():
+            return
         self.determine_winner()
+
